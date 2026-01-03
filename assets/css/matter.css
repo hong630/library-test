@@ -117,7 +117,7 @@
 }
 .modal-btn:active{ transform: translateY(1px); }
 
-
+.canvas-container, #game { touch-action: none; -webkit-user-select: none; user-select: none; }
 
 @media (max-width: 480px) {
     .wrap{

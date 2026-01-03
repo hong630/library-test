@@ -111,7 +111,8 @@
   const spawnLock = { locked: false };
 
   const onSpawn = (e) => { if(!spawnLock.locked) spawn(getX(e), 0); };
-  addEventListener('pointerdown', onSpawn, { passive: true });
+  window.addEventListener('touchstart', onSpawn, { passive: true });
+  window.addEventListener('click', onSpawn, { passive: true });
 
   const merging = new Set();
   let score = 0;
@@ -151,9 +152,21 @@
     });
   });
 
+  async function preloadImages(list){
+    await Promise.all(list.map(src => new Promise(res => {
+      const img = new Image();
+      img.onload = () => res(true);
+      img.onerror = () => res(false);
+      img.src = src;
+    })));
+  }
+
   const runner = Runner.create();
-  Runner.run(runner, engine);
-  Render.run(render);
+  (async () => {
+    await preloadImages(LEVEL_TO_IMG);
+    Runner.run(runner, engine);
+    Render.run(render);
+  })();
 
   const GAMEOVER_LINE_Y = 50;
   function showGameOver(){
