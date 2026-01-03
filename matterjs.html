@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>metter.js 테스트</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    html,body{margin:0;height:100%;background:#111}
+    canvas{display:block}
+    .tip{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);color:#aaa;font:12px monospace}
+
+    #score{
+      position:fixed;
+      top:12px;
+      right:14px;
+      color:white;
+      font:16px monospace;
+    }
+  </style>
+</head>
+<body>
+<div id="score">0</div>
+<div class="tip">탭하면 공 생성 · 같은 크기끼리 합쳐지면 더 큰 공!</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+  const {Engine,Render,Runner,World,Bodies,Events} = Matter;
+
+  const engine = Engine.create();
+  engine.world.gravity.y = 1;
+
+  const W = Math.min(innerWidth, 420);
+  const H = Math.min(innerHeight, 720);
+
+  const render = Render.create({
+    element: document.body,
+    engine,
+    options:{width:W,height:H,wireframes:false,background:'#111'}
+  });
+
+  // 벽/바닥
+  World.add(engine.world, [
+    Bodies.rectangle(W/2, H+30, W+200, 60, {isStatic:true}),
+    Bodies.rectangle(-30, H/2, 60, H+200, {isStatic:true}),
+    Bodies.rectangle(W+30, H/2, 60, H+200, {isStatic:true}),
+  ]);
+
+  // ✅ 크기 단계(“같은 크기” 판정용) + 실제 반지름 매핑
+  const LEVEL_TO_R = [12, 16, 22, 30, 40, 54, 72];
+  const LEVEL_TO_IMG = [
+      'assets/images/ball1.png',
+      'assets/images/ball2.jpg',
+      'assets/images/ball3.jpg',
+      'assets/images/ball4.jpg',
+    ];
+  const LEVEL_TO_IMG_SIZE = [24, 32, 44, 60]; // px
+  const EPS = 0; // 같은 레벨만 합치기라 0
+
+  function spawn(x, level=0, y=20){
+    const r = LEVEL_TO_R[level];
+    const img = LEVEL_TO_IMG[level];
+    const imgSize = LEVEL_TO_IMG_SIZE[level];
+    const BASE = 60; // 모든 이미지가 128x128이면 끝
+
+    const ball = Bodies.circle(x, y, r, {
+      restitution: 0.35,
+      friction: 0.02,
+      frictionAir: 0.01,
+      render:{
+        sprite:{
+          texture: img,
+          xScale: imgSize / BASE,
+          yScale: imgSize / BASE,
+        }
+      }
+    });
+    ball.level = level;
+    World.add(engine.world, ball);
+  }
+
+  function clampX(x){ return Math.max(20, Math.min(W-20, x)); }
+  function getX(e){
+    const t = e.touches?.[0] ?? e;
+    return clampX(t.clientX);
+  }
+
+  addEventListener('click', e => spawn(getX(e), 0));
+  addEventListener('touchstart', e => spawn(getX(e), 0), {passive:true});
+
+  // ✅ 중복 합치기 방지(같은 프레임에 여러번 터지는 거 막음)
+  const merging = new Set();
+  let score = 0;
+
+  Events.on(engine, 'collisionStart', e=>{
+    e.pairs.forEach(p=>{
+      const a = p.bodyA, b = p.bodyB;
+      if(a.level == null || b.level == null) return;
+      if(a.level !== b.level) return;
+
+      // 이미 제거 예정이면 패스
+      if(merging.has(a.id) || merging.has(b.id)) return;
+
+      const next = a.level + 1;
+      if(next >= LEVEL_TO_R.length) return;
+
+      score += (next + 1) * 10;
+      document.getElementById('score').innerText = score;
+
+      merging.add(a.id); merging.add(b.id);
+
+      const mx = (a.position.x + b.position.x) / 2;
+      const my = (a.position.y + b.position.y) / 2;
+
+      // 제거 → 더 큰 공 생성
+      World.remove(engine.world, [a,b]);
+      spawn(mx, next, my);
+
+      // 잠깐 후 잠금 해제
+      setTimeout(()=>{ merging.delete(a.id); merging.delete(b.id); }, 0);
+    });
+  });
+
+  Runner.run(Runner.create(), engine);
+  Render.run(render);
+</script>
+</body>
+</html>
