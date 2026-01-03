@@ -49,7 +49,7 @@
 
     margin-top: 14px;
     border: 2px solid rgba(255,255,255,.75);
-    background: rgba(15, 15, 20, .72);
+    background: rgba(15, 15, 20, 1);
     backdrop-filter: blur(8px);
 
     color: rgba(255,255,255,.92);
@@ -67,7 +67,7 @@
     transform: translateX(-50%) rotate(45deg);
     width: 12px;
     height: 12px;
-    background: rgba(15, 15, 20, .72);
+    background: rgba(15, 15, 20, 1);
     border-right: 2px solid rgba(255,255,255,.75);
     border-bottom: 2px solid rgba(255,255,255,.75);
 }
