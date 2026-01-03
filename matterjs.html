@@ -40,15 +40,13 @@
   const container = document.querySelector('.canvas-container');
   const W = Math.floor(container.clientWidth);
   const H = Math.floor(container.clientHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const render = Render.create({
     canvas: document.getElementById('game'),
     engine,
-    options:{width:W,height:H,wireframes:false,background:'transparent'}
+    options:{ width: W, height: H, wireframes:false, background:'transparent' }
   });
-
-  render.canvas.width = W;
-  render.canvas.height = H;
-  Render.setPixelRatio(render, window.devicePixelRatio);
+  Render.setPixelRatio(render, dpr);
 
   addEventListener('resize', () => location.reload());
 
@@ -104,7 +102,9 @@
   function clampX(x){ return Math.max(20, Math.min(W-20, x)); }
   function getX(e){
     const t = e.touches?.[0] ?? e;
-    return clampX(t.clientX ?? t.pageX);
+    const rect = container.getBoundingClientRect();
+    const x = (t.clientX - rect.left);
+    return clampX(x);
   }
 
   let isGameOver = false;
