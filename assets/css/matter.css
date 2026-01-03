@@ -1,0 +1,87 @@
+.big-wrapper{
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-image: url("../images/hometown.PNG");
+    background-repeat: no-repeat;
+    background-size: cover;
+}
+.canvas-container{
+    width: 100%;
+    height: 500px;
+    background-color: rgba(6, 23, 1, 0.7);
+    margin-top: 10px;
+}
+#game{
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+#score{
+    margin-top: 20px;
+    padding: 8px 10px;
+    border: 2px solid rgba(255,255,255,.85);
+    border-radius: 10px;
+
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(6px);
+
+    color: #fff;
+    font: 14px "Galmuri9", monospace;
+    letter-spacing: .5px;
+
+    box-shadow: 0 8px 18px rgba(0,0,0,.45);
+}
+#score::before{
+    content: "★ SCORE";
+    display: block;
+    font-size: 11px;
+    opacity: .85;
+    margin-bottom: 4px;
+}
+.tip{
+    position: relative;
+    left: 50%;
+    padding: 10px 12px;
+    border-radius: 14px;
+
+    margin-top: 14px;
+    border: 2px solid rgba(255,255,255,.75);
+    background: rgba(15, 15, 20, .72);
+    backdrop-filter: blur(8px);
+
+    color: rgba(255,255,255,.92);
+    font: 12px "Galmuri9", monospace;
+    letter-spacing: .2px;
+    white-space: nowrap;
+
+    box-shadow: 0 10px 24px rgba(0,0,0,.5);
+}
+.tip::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    bottom:-8px;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: rgba(15, 15, 20, .72);
+    border-right: 2px solid rgba(255,255,255,.75);
+    border-bottom: 2px solid rgba(255,255,255,.75);
+}
+
+/* 살짝 반짝이는 효과(과하지 않게) */
+.tip{
+    animation: floaty 2.2s ease-in-out infinite;
+}
+@keyframes floaty{
+    0%,100% { transform: translateX(-50%) translateY(0); }
+    50%     { transform: translateX(-50%) translateY(-3px); }
+}
+@media (max-width: 480px) {
+    .wrap{
+        width: 92vw;
+    }
+}

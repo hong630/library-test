@@ -6,23 +6,20 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>metter.js 테스트</title>
   <link rel="stylesheet" href="assets/css/style.css">
-  <style>
-    html,body{margin:0;height:100%;background:#111}
-    canvas{display:block}
-    .tip{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);color:#aaa;font:12px monospace}
-
-    #score{
-      position:fixed;
-      top:12px;
-      right:14px;
-      color:white;
-      font:16px monospace;
-    }
-  </style>
+  <link rel="stylesheet" href="assets/css/matter.css">
 </head>
 <body>
-<div id="score">0</div>
-<div class="tip">탭하면 공 생성 · 같은 크기끼리 합쳐지면 더 큰 공!</div>
+<div class="big-wrapper">
+  <div class="wrap">
+    <div id="score">0</div>
+    <div class="tip">탭하면 공 생성 · 같은 크기끼리 합쳐지면 더 큰 공!</div>
+    <div class="canvas-container">
+      <canvas id="game"></canvas>
+    </div>
+</div>
+
+
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script>
@@ -31,14 +28,20 @@
   const engine = Engine.create();
   engine.world.gravity.y = 1;
 
-  const W = Math.min(innerWidth, 420);
-  const H = Math.min(innerHeight, 720);
-
+  const container = document.querySelector('.canvas-container');
+  const W = Math.floor(container.clientWidth);
+  const H = Math.floor(container.clientHeight);
   const render = Render.create({
-    element: document.body,
+    canvas: document.getElementById('game'),
     engine,
-    options:{width:W,height:H,wireframes:false,background:'#111'}
+    options:{width:W,height:H,wireframes:false,background:'transparent'}
   });
+
+  render.canvas.width = W;
+  render.canvas.height = H;
+  Render.setPixelRatio(render, window.devicePixelRatio);
+
+  addEventListener('resize', () => location.reload());
 
   // 벽/바닥
   World.add(engine.world, [
@@ -47,15 +50,17 @@
     Bodies.rectangle(W+30, H/2, 60, H+200, {isStatic:true}),
   ]);
 
-  // ✅ 크기 단계(“같은 크기” 판정용) + 실제 반지름 매핑
   const LEVEL_TO_R = [12, 16, 22, 30, 40, 54, 72];
   const LEVEL_TO_IMG = [
       'assets/images/ball1.png',
-      'assets/images/ball2.jpg',
-      'assets/images/ball3.jpg',
-      'assets/images/ball4.jpg',
+      'assets/images/ball2.png',
+      'assets/images/ball3.png',
+      'assets/images/ball4.png',
+      'assets/images/ball5.png',
+      'assets/images/ball6.png',
+      'assets/images/ball7.png',
     ];
-  const LEVEL_TO_IMG_SIZE = [24, 32, 44, 60]; // px
+  const LEVEL_TO_IMG_SIZE = [24, 32, 44, 60, 80, 108, 144]; // px
   const EPS = 0; // 같은 레벨만 합치기라 0
 
   function spawn(x, level=0, y=20){
@@ -88,8 +93,7 @@
 
   addEventListener('click', e => spawn(getX(e), 0));
   addEventListener('touchstart', e => spawn(getX(e), 0), {passive:true});
-
-  // ✅ 중복 합치기 방지(같은 프레임에 여러번 터지는 거 막음)
+  
   const merging = new Set();
   let score = 0;
 
@@ -102,6 +106,12 @@
       // 이미 제거 예정이면 패스
       if(merging.has(a.id) || merging.has(b.id)) return;
 
+      const r = LEVEL_TO_R[a.level];
+      const dx = a.position.x - b.position.x;
+      const dy = a.position.y - b.position.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      // 반지름의 1.8배 안으로 들어오면 바로 merge
+      if(dist > r * 2.2) return;
       const next = a.level + 1;
       if(next >= LEVEL_TO_R.length) return;
 
