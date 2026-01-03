@@ -72,6 +72,10 @@
     border-bottom: 2px solid rgba(255,255,255,.75);
 }
 
+* {
+    touch-action: manipulation;
+}
+
 /* 살짝 반짝이는 효과(과하지 않게) */
 .tip{
     animation: floaty 2.2s ease-in-out infinite;
