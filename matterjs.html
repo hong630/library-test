@@ -16,6 +16,13 @@
     <div class="canvas-container">
       <canvas id="game"></canvas>
     </div>
+    <div id="gameover" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-box">
+        <p class="modal-title">GAME OVER</p>
+        <p class="modal-sub">score: <span id="finalScore">0</span></p>
+        <button id="restartBtn" class="modal-btn">다시 시작!</button>
+      </div>
+    </div>
 </div>
 
 
@@ -27,6 +34,8 @@
 
   const engine = Engine.create();
   engine.world.gravity.y = 1;
+  engine.positionIterations = 10;
+  engine.velocityIterations = 8;
 
   const container = document.querySelector('.canvas-container');
   const W = Math.floor(container.clientWidth);
@@ -44,13 +53,21 @@
   addEventListener('resize', () => location.reload());
 
   // 벽/바닥
+  const groundMargin = 70;
+  const groundThickness = 60;
   World.add(engine.world, [
-    Bodies.rectangle(W/2, H+30, W+200, 60, {isStatic:true}),
-    Bodies.rectangle(-30, H/2, 60, H+200, {isStatic:true}),
-    Bodies.rectangle(W+30, H/2, 60, H+200, {isStatic:true}),
+    Bodies.rectangle(
+            W/2,
+            H - groundMargin + (groundThickness / 2),
+            W + 200,
+            groundThickness,
+            { isStatic: true }
+    ),
+    Bodies.rectangle(-30, (H - groundMargin) / 2, 60, H + 200, {isStatic:true}),
+    Bodies.rectangle(W+30, (H - groundMargin) / 2, 60, H + 200, {isStatic:true}),
   ]);
-
-  const LEVEL_TO_R = [12, 16, 22, 30, 40, 54, 72];
+  const SCALE = 2.2;
+  const LEVEL_TO_R = [12, 16, 22, 30, 40, 54, 72].map(v => Math.round(v * SCALE));
   const LEVEL_TO_IMG = [
       'assets/images/ball1.png',
       'assets/images/ball2.png',
@@ -60,25 +77,24 @@
       'assets/images/ball6.png',
       'assets/images/ball7.png',
     ];
-  const LEVEL_TO_IMG_SIZE = [24, 32, 44, 60, 80, 108, 144]; // px
-  const EPS = 0; // 같은 레벨만 합치기라 0
-
+  const LEVEL_TO_IMG_SIZE = [24, 32, 44, 60, 80, 108, 144];
+  const EPS = 0;
+  let lastSpawnAt = 0;
   function spawn(x, level=0, y=20){
+    lastSpawnAt = Date.now();
     const r = LEVEL_TO_R[level];
     const img = LEVEL_TO_IMG[level];
-    const imgSize = LEVEL_TO_IMG_SIZE[level];
-    const BASE = 60; // 모든 이미지가 128x128이면 끝
-
+    const imgSize = r * 2;
+    const BASE = 100;
+    const spriteOk = !!img;
     const ball = Bodies.circle(x, y, r, {
       restitution: 0.35,
       friction: 0.02,
       frictionAir: 0.01,
+      slop: 0,
       render:{
-        sprite:{
-          texture: img,
-          xScale: imgSize / BASE,
-          yScale: imgSize / BASE,
-        }
+        ...(spriteOk ? { sprite:{ texture: img, xScale: imgSize / BASE, yScale: imgSize / BASE } }
+                : { fillStyle: '#fff' })
       }
     });
     ball.level = level;
@@ -88,12 +104,15 @@
   function clampX(x){ return Math.max(20, Math.min(W-20, x)); }
   function getX(e){
     const t = e.touches?.[0] ?? e;
-    return clampX(t.clientX);
+    return clampX(t.clientX ?? t.pageX);
   }
 
-  addEventListener('click', e => spawn(getX(e), 0));
-  addEventListener('touchstart', e => spawn(getX(e), 0), {passive:true});
-  
+  let isGameOver = false;
+  const spawnLock = { locked: false };
+
+  const onSpawn = (e) => { if(!spawnLock.locked) spawn(getX(e), 0); };
+  addEventListener('pointerdown', onSpawn, { passive: true });
+
   const merging = new Set();
   let score = 0;
 
@@ -103,14 +122,14 @@
       if(a.level == null || b.level == null) return;
       if(a.level !== b.level) return;
 
-      // 이미 제거 예정이면 패스
+
       if(merging.has(a.id) || merging.has(b.id)) return;
 
       const r = LEVEL_TO_R[a.level];
       const dx = a.position.x - b.position.x;
       const dy = a.position.y - b.position.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
-      // 반지름의 1.8배 안으로 들어오면 바로 merge
+
       if(dist > r * 2.2) return;
       const next = a.level + 1;
       if(next >= LEVEL_TO_R.length) return;
@@ -132,8 +151,60 @@
     });
   });
 
-  Runner.run(Runner.create(), engine);
+  const runner = Runner.create();
+  Runner.run(runner, engine);
   Render.run(render);
+
+  const GAMEOVER_LINE_Y = 50;
+  function showGameOver(){
+    if(isGameOver) return;
+    isGameOver = true;
+    spawnLock.locked = true;
+    document.getElementById('finalScore').innerText = String(score);
+    document.getElementById('gameover').classList.remove('hidden');
+    Runner.stop(runner);
+    Runner.stop(runner);
+  }
+  // 매 프레임 체크: 공이 위 라인을 침범하면 게임오버
+  Events.on(engine, 'afterUpdate', () => {
+    if(isGameOver) return;
+    if(Date.now() - lastSpawnAt < 800) return;
+    const bodies = Matter.Composite.allBodies(engine.world);
+    for (const b of bodies) {
+      if (b.isStatic) continue;
+      if (b.level == null) continue; // 공만 체크
+      const r = LEVEL_TO_R[b.level] ?? 0;
+      if ((b.position.y - r) <= GAMEOVER_LINE_Y) { showGameOver(); break; }
+    }
+  });
+
+  function resetGame(){
+    // 월드 비우고(벽/바닥은 다시 깔기)
+    Matter.World.clear(engine.world, false);
+    Matter.Engine.clear(engine);
+    score = 0;
+    document.getElementById('score').innerText = '0';
+    document.getElementById('gameover').classList.add('hidden');
+    isGameOver = false;
+    spawnLock.locked = false;
+    World.add(engine.world, [
+      // 바닥을 캔버스 안쪽으로 올림
+      Bodies.rectangle(
+              W/2,
+              H - groundMargin + (groundThickness / 2),
+              W + 200,
+              groundThickness,
+              { isStatic: true }
+      ),
+      // 벽도 바닥 기준으로 살짝 위로 맞춤(안정)
+      Bodies.rectangle(-30, (H - groundMargin) / 2, 60, H + 200, {isStatic:true}),
+      Bodies.rectangle(W+30, (H - groundMargin) / 2, 60, H + 200, {isStatic:true}),
+    ]);
+    Runner.run(runner, engine);
+  }
+  document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+
 </script>
 </body>
 </html>
