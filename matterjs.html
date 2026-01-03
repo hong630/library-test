@@ -111,15 +111,14 @@
   const spawnLock = { locked: false };
 
   const onSpawn = (e) => { if(!spawnLock.locked) spawn(getX(e), 0); };
-  let ignoreClickUntil = 0;
-  window.addEventListener('touchstart', (e) => {
-    ignoreClickUntil = Date.now() + 800; // 터치 후 0.8초 동안 click 무시
-    onSpawn(e);
-  }, { passive: true });
-  window.addEventListener('click', (e) => {
-    if (Date.now() < ignoreClickUntil) return;
-    onSpawn(e);
-  }, { passive: true });
+
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
+  console.log('isMobile', isMobile)
+  if (isMobile) {
+    window.addEventListener('touchstart', onSpawn, { passive: true });
+  } else {
+    window.addEventListener('click', onSpawn, { passive: true });
+  }
 
   const merging = new Set();
   let score = 0;
