@@ -12,7 +12,10 @@
 <div class="big-wrapper">
   <div class="wrap">
     <div id="score">0</div>
-    <div class="tip">탭하면 공 생성 · 같은 크기끼리 합쳐지면 더 큰 공!</div>
+    <div class="tip">
+      <span class="tip-text">탭하면 공 생성 · 같은 크기끼리 합쳐지면 더 큰 공!</span>
+      <span class="next-wrap" aria-label="다음 공"><span class="next-label">NEXT</span><img id="nextBallImg" alt="다음 공" /></span>
+    </div>
     <div class="canvas-container">
       <canvas id="game"></canvas>
     </div>
@@ -65,7 +68,11 @@
     Bodies.rectangle(W+30, (H - groundMargin) / 2, 60, H + 200, {isStatic:true}),
   ]);
   const SCALE = 2.2;
-  const LEVEL_TO_R = [12, 16, 22, 30, 40, 54, 72].map(v => Math.round(v * SCALE));
+  const BALL_GLOBAL_SCALE = 0.90;
+  const LEVEL_TO_R = [12, 16, 22, 30, 40, 54, 72]
+          .map(v => Math.round(v * SCALE * BALL_GLOBAL_SCALE));
+  const START_LEVEL_MAX = 3;   // 0~3 => 1~4번째 이미지
+  const START_R_SCALE = 0.78;  // 작게 만들 비율(원하는 만큼 조절)
   const LEVEL_TO_IMG = [
       'assets/images/ball1.PNG',
       'assets/images/ball2.png',
@@ -78,9 +85,15 @@
   const LEVEL_TO_IMG_SIZE = [24, 32, 44, 60, 80, 108, 144];
   const EPS = 0;
   let lastSpawnAt = 0;
-  function spawn(x, level=0, y=20){
+  let lastGraceAt = 0;
+  function spawn(x, level=0, y=20, { byUser=false } = {}){
     lastSpawnAt = Date.now();
-    const r = LEVEL_TO_R[level];
+    if (byUser) {
+      if (lastSpawnAt - lastGraceAt > 600) lastGraceAt = lastSpawnAt;
+    }
+    const rBase = LEVEL_TO_R[level];
+    const r = (level <= START_LEVEL_MAX) ? Math.round(rBase * START_R_SCALE)
+            : rBase;
     const img = LEVEL_TO_IMG[level];
     const imgSize = r * 2;
     const BASE = 100;
@@ -96,6 +109,8 @@
       }
     });
     ball.level = level;
+    ball.r = r;
+    ball.spawnedAt = Date.now();
     World.add(engine.world, ball);
   }
 
@@ -109,9 +124,22 @@
 
   let isGameOver = false;
   const spawnLock = { locked: false };
-
-  const onSpawn = (e) => { if(!spawnLock.locked) spawn(getX(e), 0); };
-
+  function randInt(min, max){
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+  let nextLevel = randInt(0, START_LEVEL_MAX);
+  const nextImgEl = document.getElementById('nextBallImg');
+  function updateNextUi(){
+    if (!nextImgEl) return;
+    nextImgEl.src = LEVEL_TO_IMG[nextLevel];
+  }
+  updateNextUi();
+  const onSpawn = (e) => {
+    if (spawnLock.locked) return;
+    spawn(getX(e), nextLevel, 20, { byUser: true });
+    nextLevel = randInt(0, START_LEVEL_MAX);
+    updateNextUi();
+  };
   const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1;
   console.log('isMobile', isMobile)
   if (isMobile) {
@@ -151,7 +179,7 @@
 
       // 제거 → 더 큰 공 생성
       World.remove(engine.world, [a,b]);
-      spawn(mx, next, my);
+      spawn(mx, next, my, { byUser: false });
 
       // 잠깐 후 잠금 해제
       setTimeout(()=>{ merging.delete(a.id); merging.delete(b.id); }, 0);
@@ -175,6 +203,23 @@
   })();
 
   const GAMEOVER_LINE_Y = 50;
+  const GAMEOVER_GRACE_MS = 300;
+  const GAMEOVER_HOLD_MS = 320;
+  const GAMEOVER_MARGIN = 10;
+  const GAMEOVER_STILL_SPEED = 0.45;
+  let dangerSince = null;
+  const STABLE_SPEED = 0.55;
+  const STABLE_DELAY_MS = 500;
+  let stableSince = null;
+  function isWorldStable(bodies){
+    // 공들 중 하나라도 빠르게 움직이면 아직 안정 아님
+    for (const b of bodies) {
+      if (b.isStatic) continue;
+      if (b.level == null) continue;
+      if ((b.speed ?? Math.hypot(b.velocity.x, b.velocity.y)) > STABLE_SPEED) return false;
+    }
+    return true;
+  }
   function showGameOver(){
     if(isGameOver) return;
     isGameOver = true;
@@ -182,19 +227,45 @@
     document.getElementById('finalScore').innerText = String(score);
     document.getElementById('gameover').classList.remove('hidden');
     Runner.stop(runner);
-    Runner.stop(runner);
   }
   // 매 프레임 체크: 공이 위 라인을 침범하면 게임오버
   Events.on(engine, 'afterUpdate', () => {
     if(isGameOver) return;
-    if(Date.now() - lastSpawnAt < 800) return;
+    if(Date.now() - lastGraceAt < GAMEOVER_GRACE_MS) return;
     const bodies = Matter.Composite.allBodies(engine.world);
+    const now = Date.now();
+    const stableNow = isWorldStable(bodies);
+    if (!stableNow) {
+      stableSince = null;
+      dangerSince = null;
+      return;
+    }
+    if (stableSince == null) stableSince = now;
+    if (now - stableSince < STABLE_DELAY_MS) {
+      dangerSince = null;
+      return;
+    }
+    let isDanger = false;
     for (const b of bodies) {
       if (b.isStatic) continue;
       if (b.level == null) continue; // 공만 체크
-      const r = LEVEL_TO_R[b.level] ?? 0;
-      if ((b.position.y - r) <= GAMEOVER_LINE_Y) { showGameOver(); break; }
+      if (b.spawnedAt && (now - b.spawnedAt) < 450) continue;
+      const r = b.r ?? (LEVEL_TO_R[b.level] ?? 0);
+      const HIT_R_SCALE = 0.65; // 0.55~0.75 사이로 튜닝 추천
+      const topY = (b.position.y - r * HIT_R_SCALE);
+      const speed = b.speed ?? Math.hypot(b.velocity.x, b.velocity.y);
+      if (topY <= (GAMEOVER_LINE_Y - GAMEOVER_MARGIN) && speed < GAMEOVER_STILL_SPEED) {
+        isDanger = true;
+        break;
+      }
     }
+    if (!isDanger) {
+      dangerSince = null;
+      return;
+    }
+
+    if (dangerSince == null) dangerSince = Date.now();
+    if (Date.now() - dangerSince >= GAMEOVER_HOLD_MS) showGameOver()
   });
 
   function resetGame(){
@@ -206,6 +277,8 @@
     document.getElementById('gameover').classList.add('hidden');
     isGameOver = false;
     spawnLock.locked = false;
+    dangerSince = null;
+    stableSince = null;
     World.add(engine.world, [
       // 바닥을 캔버스 안쪽으로 올림
       Bodies.rectangle(
